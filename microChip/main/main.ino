@@ -23,6 +23,7 @@
 #include <OneWire.h>
 
 #define ONE_WIRE_BUS D1  //Bestimmt Port an dem der Sensor angeschlossen ist
+#define WATERPUMPVOLTAGE D2
 
 OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature DS18B20(&oneWire);
@@ -33,6 +34,7 @@ void setup() {
  pinMode(LED, OUTPUT); // Port aus Ausgang schalten
  Serial.begin(115200);
  DS18B20.begin();
+ pinMode(WATERPUMPVOLTAGE, OUTPUT);
 }
 
 float getTemperatur() {
@@ -55,5 +57,11 @@ void loop() {
  dtostrf(temperatur, 2, 2, temperaturStr);
  Serial.print("Temperatur: "); 
  Serial.println(temperaturStr); 
+ delay(1000);
+ digitalWrite(WATERPUMPVOLTAGE, HIGH);
+ delay(5000);
+ digitalWrite(WATERPUMPVOLTAGE, LOW);
+ delay(2000);
+ 
 
 }
