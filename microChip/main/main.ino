@@ -22,6 +22,8 @@
 #include <Base64.h>
 #include <OneWire.h>
 
+#define MOISTURE_SENSOR_A A0
+#define MOISTURE_SENSOR_D D5 // D3 and D4 is already occupied
 #define ONE_WIRE_BUS D1  //Bestimmt Port an dem der Sensor angeschlossen ist
 #define WATERPUMPVOLTAGE D2
 
@@ -29,12 +31,14 @@ OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature DS18B20(&oneWire);
 
 char temperaturStr[6];
+char voltageStr[6];
 
 void setup() {
  pinMode(LED, OUTPUT); // Port aus Ausgang schalten
  Serial.begin(115200);
  DS18B20.begin();
  pinMode(WATERPUMPVOLTAGE, OUTPUT);
+ pinMode(MOISTURE_SENSOR_D, INPUT);
 }
 
 float getTemperatur() {
@@ -62,6 +66,12 @@ void loop() {
  delay(5000);
  digitalWrite(WATERPUMPVOLTAGE, LOW);
  delay(2000);
+ float voltagePlant = analogRead(MOISTURE_SENSOR_A);
+ int voltageReservoir = digitalRead(MOISTURE_SENSOR_D);
+ delay(1000);
+ Serial.print("Voltage (moisture of earth): ");
+ Serial.println(String(voltagePlant));
+ Serial.print("Voltage (water level): ");
+ Serial.println(String(voltageReservoir));
  
-
 }
