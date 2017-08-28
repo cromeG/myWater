@@ -19,8 +19,11 @@
 
 #include <DallasTemperature.h> //Siehe Hinweis oben, verwendet wird 
                             //https://github.com/milesburton/Arduino-Temperature-Control-Library
-#include <Base64.h>
-#include <OneWire.h>
+#include <Base64.h>  // required for temperature sensor
+#include <OneWire.h> // required for temperature sensor
+
+#include <ESP8266WiFi.h>  // WLAN
+#include <ESP8266WebServer.h> // WLAN
 
 #define MOISTURE_SENSOR_A A0
 #define MOISTURE_SENSOR_D D5 // D3 and D4 is already occupied
@@ -33,12 +36,84 @@ DallasTemperature DS18B20(&oneWire);
 char temperaturStr[6];
 char voltageStr[6];
 
+float merketemperatur=0;
+
+const char* ssid = "foo"; //Ihr Wlan,Netz SSID eintragen
+const char* pass = "10"; //Ihr Wlan,Netz Passwort eintragen
+IPAddress ip(192,168,2,75); //Feste IP des neuen Servers, frei wählbar
+IPAddress gateway(192,168,2,1); //Gatway (IP Router eintragen)
+IPAddress subnet(255,255,255,0); //Subnet Maske eintragen
+
+ESP8266WebServer server(80);
+
+void handleRoot() {
+ //Temperatur auch bei Url-Aufruf zurückgeben
+ String message="*** Ueberwachungs Server - Beispiel von www.mikrocontroller-elektronik.de ***\n";
+ String tempstr= String(merketemperatur, 2); 
+ message += "Temperatur Innen : " + tempstr +"\n";
+ //tempstr= String(merkeaussentemperatur, 2); 
+ //message += "Temperatur Aussen: " + tempstr +"\n";
+ server.send(200, "text/plain", message);
+}
+
+
+void handleTemperatur() {
+ //printUrlArg(); //fuer Debugz Zwecke
+
+ String stemp =server.arg("wert");
+ float temperatur = stemp.toFloat();
+ /*if (merkeaussentemperatur!=temperatur) {
+ zeigeAussenTemperatur(temperatur);
+ merkeaussentemperatur=temperatur;
+ 
+ }
+*/
+  merketemperatur=temperatur;
+ //Temperatur auch bei Url-Aufruf zurückgeben
+ String message="*** Ueberwachungs Server - Beispiel von www.mikrocontroller-elektronik.de ***\n";
+ String tempstr= String(merketemperatur, 2); 
+ message += "Temperatur Innen : " + tempstr +"\n";
+ //tempstr= String(merkeaussentemperatur, 2); 
+// message += "Temperatur Aussen: " + tempstr +"\n";
+ server.send(200, "text/plain", message);
+}
+
+
+void printUrlArg() {
+ //Alle Parameter seriell ausgeben
+ String message="";
+ for (uint8_t i=0; i<server.args(); i++){
+ message += " " + server.argName(i) + ": " + server.arg(i) + "\n";
+ }
+ server.send(200, "text/plain", message);
+ Serial.println(message);
+}
+
+
 void setup() {
  pinMode(LED, OUTPUT); // Port aus Ausgang schalten
  Serial.begin(115200);
  DS18B20.begin();
  pinMode(WATERPUMPVOLTAGE, OUTPUT);
  pinMode(MOISTURE_SENSOR_D, INPUT);
+ 
+ WiFi.begin(ssid, pass);
+ WiFi.config(ip, gateway, subnet);
+ while (WiFi.status() != WL_CONNECTED) {
+ delay(500);
+ Serial.print(".");
+ } 
+ Serial.println("");
+ Serial.print("Verbunden mit ");
+ Serial.println(ssid);
+ Serial.print("IP address: ");
+ Serial.println(WiFi.localIP());
+ 
+ server.on("/",handleRoot) ;
+ server.on("/sensor/temperatur/", handleTemperatur);
+ server.begin();
+ 
+ Serial.println("HTTP Server wurde gestartet!");
 }
 
 float getTemperatur() {
@@ -52,12 +127,18 @@ float getTemperatur() {
 }
 
 void loop() {
+
+  server.handleClient();
+ 
+ delay(500); 
+
  digitalWrite(LED, LOW); //Led port ausschalten
  delay(1000); //1 Sek Pause
  digitalWrite(LED, HIGH); //Led port einschlaten
  delay(1000); 
 
  float temperatur = getTemperatur();
+ merketemperatur = temperatur;
  dtostrf(temperatur, 2, 2, temperaturStr);
  Serial.print("Temperatur: "); 
  Serial.println(temperaturStr); 
