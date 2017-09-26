@@ -38,49 +38,72 @@ char voltageStr[6];
 
 float merketemperatur=0;
 
-const char* ssid = "foo"; //Ihr Wlan,Netz SSID eintragen
-const char* pass = "10"; //Ihr Wlan,Netz Passwort eintragen
-IPAddress ip(192,168,2,75); //Feste IP des neuen Servers, frei wählbar
-IPAddress gateway(192,168,2,1); //Gatway (IP Router eintragen)
+const char* ssid = "StefanWLAN"; //Ihr Wlan,Netz SSID eintragen
+const char* pass = "Senfeule1992"; //Ihr Wlan,Netz Passwort eintragen
+IPAddress ip(192,168,0,75); //Feste IP des neuen Servers, frei wählbar
+IPAddress gateway(192,168,0,1); //Gatway (IP Router eintragen)
 IPAddress subnet(255,255,255,0); //Subnet Maske eintragen
 
 ESP8266WebServer server(80);
 
+// What is done when the root website, i.e. the IP is called
 void handleRoot() {
- //Temperatur auch bei Url-Aufruf zurückgeben
- String message="*** Ueberwachungs Server - Beispiel von www.mikrocontroller-elektronik.de ***\n";
- String tempstr= String(merketemperatur, 2); 
- message += "Temperatur Innen : " + tempstr +"\n";
- //tempstr= String(merkeaussentemperatur, 2); 
- //message += "Temperatur Aussen: " + tempstr +"\n";
- server.send(200, "text/plain", message);
+  // initialize variable containing the text written on the webpage
+  float tempSensorVal = 22.5;
+  int   watLevReSeVal = 1;
+  int   moistureSeVal = 200;
+  int   moisturMinVal = 100;
+  int   moisturMaxVal = 300;
+  String webpageContent = " ";
+  String tempSensorCStr = String(tempSensorVal, 2);
+  String WatLevReserStr = String(watLevReSeVal);
+  String moistureSenStr = String(moistureSeVal);
+  String moistureMinStr = String(moisturMinVal);
+  String moistureMaxStr = String(moisturMaxVal);
+  
+  // Fill webpage with information
+  webpageContent += "MYWATER Artificial Watering Machine Status Report \n\n";
+  webpageContent += "Temperatur       : " + tempSensorCStr + "°C \n";
+  webpageContent += "Wasserstand      : " + WatLevReserStr + "?? \n";
+  webpageContent += "Feuchtigkeit     : " + moistureSenStr + "?? \n\n"; 
+  webpageContent += "Mindestfeuchte   : " + moistureMinStr + "?? \n ";
+  webpageContent += "Maximale Feuchte : " + moistureMaxStr + "?? \n"; 
+
+  moistureSeVal = 0;
+  if (moistureSeVal == 0)
+  {
+    webpageContent += "WASSER-RESERVOIR LEER. BITTE NACHFÜLLEN";
+  }
+
+  server.send(200, "text/plain", webpageContent);
 }
 
 
 void handleTemperatur() {
  //printUrlArg(); //fuer Debugz Zwecke
 
- String stemp =server.arg("wert");
- float temperatur = stemp.toFloat();
- /*if (merkeaussentemperatur!=temperatur) {
- zeigeAussenTemperatur(temperatur);
- merkeaussentemperatur=temperatur;
+ String stemp =server.arg("wert"); //write argument with argName wert to stemp
+ float temperatur = stemp.toFloat(); //convert this value to a floating number
+// if (merkeaussentemperatur!=temperatur) { // if it is not equals the value of the temperature sensor reset it
+ //zeigeAussenTemperatur(temperatur);
+// merkeaussentemperatur=temperatur;
  
- }
-*/
-  merketemperatur=temperatur;
+ //}
+
+ // merketemperatur=temperatur;
  //Temperatur auch bei Url-Aufruf zurückgeben
  String message="*** Ueberwachungs Server - Beispiel von www.mikrocontroller-elektronik.de ***\n";
- String tempstr= String(merketemperatur, 2); 
- message += "Temperatur Innen : " + tempstr +"\n";
+ //String tempstr= String(merketemperatur, 2); 
+ //message += "Temperatur Innen : " + tempstr +"\n";
  //tempstr= String(merkeaussentemperatur, 2); 
 // message += "Temperatur Aussen: " + tempstr +"\n";
+message = "handleTemperatur";
  server.send(200, "text/plain", message);
 }
 
 
 void printUrlArg() {
- //Alle Parameter seriell ausgeben
+ //Write all parameters within URL into message variable and print it on the website and on the serial output
  String message="";
  for (uint8_t i=0; i<server.args(); i++){
  message += " " + server.argName(i) + ": " + server.arg(i) + "\n";
@@ -136,23 +159,24 @@ void loop() {
  delay(1000); //1 Sek Pause
  digitalWrite(LED, HIGH); //Led port einschlaten
  delay(1000); 
+ //printUrlArg();
 
- float temperatur = getTemperatur();
- merketemperatur = temperatur;
- dtostrf(temperatur, 2, 2, temperaturStr);
- Serial.print("Temperatur: "); 
- Serial.println(temperaturStr); 
- delay(1000);
- digitalWrite(WATERPUMPVOLTAGE, HIGH);
- delay(5000);
- digitalWrite(WATERPUMPVOLTAGE, LOW);
- delay(2000);
+ /*float temperatur = getTemperatur();
+ #merketemperatur = temperatur;
+ #dtostrf(temperatur, 2, 2, temperaturStr);
+ #Serial.print("Temperatur: "); 
+ #Serial.println(temperaturStr); 
+ #delay(1000);
+ #digitalWrite(WATERPUMPVOLTAGE, HIGH);
+ #delay(1000);
+ #digitalWrite(WATERPUMPVOLTAGE, LOW);
+ #delay(2000);
  float voltagePlant = analogRead(MOISTURE_SENSOR_A);
- int voltageReservoir = digitalRead(MOISTURE_SENSOR_D);
- delay(1000);
- Serial.print("Voltage (moisture of earth): ");
- Serial.println(String(voltagePlant));
- Serial.print("Voltage (water level): ");
- Serial.println(String(voltageReservoir));
+ #int voltageReservoir = digitalRead(MOISTURE_SENSOR_D);
+ #delay(1000);
+ #Serial.print("Voltage (moisture of earth): ");
+ #Serial.println(String(voltagePlant));
+ #Serial.print("Voltage (water level): ");
+ #Serial.println(String(voltageReservoir));*/
  
 }
