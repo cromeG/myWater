@@ -49,11 +49,9 @@ ESP8266WebServer server(80);
 // What is done when the root website, i.e. the IP is called
 void handleRoot() {
   // initialize variable containing the text written on the webpage
-  float tempSensorVal = 22.5;
+  float tempSensorVal = getTemperatur();
   int   watLevReSeVal = 1;
   int   moistureSeVal = 200;
-  int   moisturMinVal = 100;
-  int   moisturMaxVal = 300;
   String webpageContent = " ";
   String tempSensorCStr = String(tempSensorVal, 2);
   String WatLevReserStr = String(watLevReSeVal);
@@ -78,6 +76,13 @@ void handleRoot() {
   server.send(200, "text/plain", webpageContent);
 }
 
+void handleMoisture() {
+  String argContainer = "";
+  argContainer = server.arg("minMoisture");
+  moisturMinVal = argContainer.toFloat();
+  argContainer = server.arg("maxMoisture");
+  moisturMaxVal = argContainer.toFloat();
+}
 
 void handleTemperatur() {
  //printUrlArg(); //fuer Debugz Zwecke
