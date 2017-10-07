@@ -25,8 +25,8 @@
 #include <ESP8266WiFi.h>  // WLAN
 #include <ESP8266WebServer.h> // WLAN
 
-#define MOISTURE_SENSOR_A A0
-#define MOISTURE_SENSOR_D D5 // D3 and D4 is already occupied
+#define MOISTURE_SENSOR_A A0 // Analog moisture
+#define MOISTURE_SENSOR_D D5 // D3 and D4 is already occupied water level
 #define ONE_WIRE_BUS D1  //Bestimmt Port an dem der Sensor angeschlossen ist
 #define WATERPUMPVOLTAGE D2
 
@@ -37,7 +37,11 @@ char temperaturStr[6];
 char voltageStr[6];
 
 float merketemperatur=0;
+float moisturMinVal = 1000;
+float moisturMaxVal = 700;
+int timeChunkCounter = 0;
 
+int moistureSeVal = 0;
 const char* ssid = "StefanWLAN"; //Ihr Wlan,Netz SSID eintragen
 const char* pass = "Senfeule1992"; //Ihr Wlan,Netz Passwort eintragen
 IPAddress ip(192,168,0,75); //Feste IP des neuen Servers, frei wählbar
@@ -46,12 +50,39 @@ IPAddress subnet(255,255,255,0); //Subnet Maske eintragen
 
 ESP8266WebServer server(80);
 
+void setup() {
+ pinMode(LED, OUTPUT); // Port aus Ausgang schalten
+ Serial.begin(115200);
+ DS18B20.begin();
+ pinMode(WATERPUMPVOLTAGE, OUTPUT);
+ pinMode(MOISTURE_SENSOR_D, INPUT);
+ 
+ WiFi.begin(ssid, pass);
+ WiFi.config(ip, gateway, subnet);
+ while (WiFi.status() != WL_CONNECTED) {
+ delay(500);
+ Serial.print(".");
+ } 
+ Serial.println("");
+ Serial.print("Verbunden mit ");
+ Serial.println(ssid);
+ Serial.print("IP address: ");
+ Serial.println(WiFi.localIP());
+
+ //attribute weblinks to the respective methods
+ server.on("/",handleRoot) ;
+ server.on("/setMoistureInterval/", handleMoisture);
+ server.begin();
+ 
+ Serial.println("HTTP Server wurde gestartet!");
+}
+
 // What is done when the root website, i.e. the IP is called
 void handleRoot() {
   // initialize variable containing the text written on the webpage
   float tempSensorVal = getTemperatur();
   int   watLevReSeVal = 1;
-  int   moistureSeVal = 200;
+  moistureSeVal = getMoisture();
   String webpageContent = " ";
   String tempSensorCStr = String(tempSensorVal, 2);
   String WatLevReserStr = String(watLevReSeVal);
@@ -76,112 +107,56 @@ void handleRoot() {
   server.send(200, "text/plain", webpageContent);
 }
 
+//called if webpage setMoistureInterval is called
 void handleMoisture() {
   String argContainer = "";
   argContainer = server.arg("minMoisture");
   moisturMinVal = argContainer.toFloat();
   argContainer = server.arg("maxMoisture");
   moisturMaxVal = argContainer.toFloat();
-}
 
-void handleTemperatur() {
- //printUrlArg(); //fuer Debugz Zwecke
-
- String stemp =server.arg("wert"); //write argument with argName wert to stemp
- float temperatur = stemp.toFloat(); //convert this value to a floating number
-// if (merkeaussentemperatur!=temperatur) { // if it is not equals the value of the temperature sensor reset it
- //zeigeAussenTemperatur(temperatur);
-// merkeaussentemperatur=temperatur;
- 
- //}
-
- // merketemperatur=temperatur;
- //Temperatur auch bei Url-Aufruf zurückgeben
- String message="*** Ueberwachungs Server - Beispiel von www.mikrocontroller-elektronik.de ***\n";
- //String tempstr= String(merketemperatur, 2); 
- //message += "Temperatur Innen : " + tempstr +"\n";
- //tempstr= String(merkeaussentemperatur, 2); 
-// message += "Temperatur Aussen: " + tempstr +"\n";
-message = "handleTemperatur";
- server.send(200, "text/plain", message);
-}
-
-
-void printUrlArg() {
- //Write all parameters within URL into message variable and print it on the website and on the serial output
- String message="";
- for (uint8_t i=0; i<server.args(); i++){
- message += " " + server.argName(i) + ": " + server.arg(i) + "\n";
- }
- server.send(200, "text/plain", message);
- Serial.println(message);
-}
-
-
-void setup() {
- pinMode(LED, OUTPUT); // Port aus Ausgang schalten
- Serial.begin(115200);
- DS18B20.begin();
- pinMode(WATERPUMPVOLTAGE, OUTPUT);
- pinMode(MOISTURE_SENSOR_D, INPUT);
- 
- WiFi.begin(ssid, pass);
- WiFi.config(ip, gateway, subnet);
- while (WiFi.status() != WL_CONNECTED) {
- delay(500);
- Serial.print(".");
- } 
- Serial.println("");
- Serial.print("Verbunden mit ");
- Serial.println(ssid);
- Serial.print("IP address: ");
- Serial.println(WiFi.localIP());
- 
- server.on("/",handleRoot) ;
- server.on("/sensor/temperatur/", handleTemperatur);
- server.begin();
- 
- Serial.println("HTTP Server wurde gestartet!");
+  String message = "Feuchtigkeitsintervall erfolgreich gesetzt!";
+  server.send(200, "text/plain", message);
 }
 
 float getTemperatur() {
  float temp;
+ // Read temperature until the sensor measures something within its functioning interval.
  do {
- DS18B20.requestTemperatures(); 
- temp = DS18B20.getTempCByIndex(0);
- delay(100);
+   DS18B20.requestTemperatures(); 
+   temp = DS18B20.getTempCByIndex(0);
+   delay(100);
  } while (temp == 85.0 || temp == (-127.0));
+ 
  return temp;
 }
 
+int getMoisture(){
+  return analogRead(MOISTURE_SENSOR_A);
+}
+
 void loop() {
-
-  server.handleClient();
- 
- delay(500); 
-
+ delay(500);
+ timeChunkCounter++;
+ // Flash up notification LED when server is ready to answer (main webpage is reloaded given a request)
  digitalWrite(LED, LOW); //Led port ausschalten
  delay(1000); //1 Sek Pause
  digitalWrite(LED, HIGH); //Led port einschlaten
- delay(1000); 
- //printUrlArg();
+ delay(500); 
+ server.handleClient();
 
- /*float temperatur = getTemperatur();
- #merketemperatur = temperatur;
- #dtostrf(temperatur, 2, 2, temperaturStr);
- #Serial.print("Temperatur: "); 
- #Serial.println(temperaturStr); 
- #delay(1000);
- #digitalWrite(WATERPUMPVOLTAGE, HIGH);
- #delay(1000);
- #digitalWrite(WATERPUMPVOLTAGE, LOW);
- #delay(2000);
- float voltagePlant = analogRead(MOISTURE_SENSOR_A);
- #int voltageReservoir = digitalRead(MOISTURE_SENSOR_D);
- #delay(1000);
- #Serial.print("Voltage (moisture of earth): ");
- #Serial.println(String(voltagePlant));
- #Serial.print("Voltage (water level): ");
- #Serial.println(String(voltageReservoir));*/
- 
+// 2 seconds
+
+ if ( (timeChunkCounter == 3) | (timeChunkCounter == 10) ) {
+   float currentMoisture = getMoisture();
+   if ( currentMoisture >= moisturMinVal ) {
+     digitalWrite(WATERPUMPVOLTAGE, HIGH);
+     delay(5000);
+     digitalWrite(WATERPUMPVOLTAGE, LOW);
+     if (timeChunkCounter == 3){
+       timeChunkCounter = 0;
+     }
+   }    
+ }
+ Serial.println(String(getMoisture()));
 }
