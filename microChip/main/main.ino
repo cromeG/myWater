@@ -39,8 +39,13 @@ char voltageStr[6];
 float merketemperatur=0;
 float moisturMinVal = 1000;
 float moisturMaxVal = 700;
+float onlyMonitor = 1;
 int timeChunkCounter = 0;
-
+ // Log der Pumphistorie
+int pumpcycle = 0;
+int pumptime = 1000;
+int intervallength = 30;
+int  watLevReSeVal = 0;
 int moistureSeVal = 0;
 const char* ssid = "StefanWLAN"; //Ihr Wlan,Netz SSID eintragen
 const char* pass = "Senfeule1992"; //Ihr Wlan,Netz Passwort eintragen
@@ -81,7 +86,7 @@ void setup() {
 void handleRoot() {
   // initialize variable containing the text written on the webpage
   float tempSensorVal = getTemperatur();
-  int   watLevReSeVal = 1;
+  watLevReSeVal = getReservoir();
   moistureSeVal = getMoisture();
   String webpageContent = " ";
   String tempSensorCStr = String(tempSensorVal, 2);
@@ -89,19 +94,37 @@ void handleRoot() {
   String moistureSenStr = String(moistureSeVal);
   String moistureMinStr = String(moisturMinVal);
   String moistureMaxStr = String(moisturMaxVal);
+  String PumpCounterStr = String(pumpcycle);
+  String PumpTimeStr = String(pumptime);
+  String IntervalLengthStr = String(intervallength);
   
   // Fill webpage with information
   webpageContent += "MYWATER Artificial Watering Machine Status Report \n\n";
   webpageContent += "Temperatur       : " + tempSensorCStr + "°C \n";
   webpageContent += "Wasserstand      : " + WatLevReserStr + "?? \n";
   webpageContent += "Feuchtigkeit     : " + moistureSenStr + "?? \n\n"; 
-  webpageContent += "Mindestfeuchte   : " + moistureMinStr + "?? \n ";
-  webpageContent += "Maximale Feuchte : " + moistureMaxStr + "?? \n"; 
+  webpageContent += "Mindestfeuchte   : " + moistureMinStr + "?? \n";
+  webpageContent += "Maximale Feuchte : " + moistureMaxStr + "?? \n";
+  webpageContent += "Anzahl Pumpzyklen : " + PumpCounterStr + " \n";
+  webpageContent += "Pumpdauer : " + PumpTimeStr + "ms \n"; 
+    webpageContent += "Intervall Länge : " + IntervalLengthStr + "[3s] \n"; 
 
-  moistureSeVal = 0;
-  if (moistureSeVal == 0)
+ // moistureSeVal = 0;
+  if (watLevReSeVal == 0)
   {
-    webpageContent += "WASSER-RESERVOIR LEER. BITTE NACHFÜLLEN";
+    webpageContent += "WASSER-RESERVOIR LEER. BITTE NACHFÜLLEN \n\n";
+  }
+    if (watLevReSeVal == 1)
+  {
+    webpageContent += "WASSER-RESERVOIR GENÜGEND GEFÜLLT \n\n";
+  }
+    if (onlyMonitor == 1)
+  {
+    webpageContent += "NUR MONITORING. ES WIRD NICHT GEGOSSEN !";
+  }
+    if (onlyMonitor == 0)
+  {
+    webpageContent += "ES WIRD GEGOSSEN BEI BEDARF";
   }
 
   server.send(200, "text/plain", webpageContent);
@@ -114,6 +137,12 @@ void handleMoisture() {
   moisturMinVal = argContainer.toFloat();
   argContainer = server.arg("maxMoisture");
   moisturMaxVal = argContainer.toFloat();
+  argContainer = server.arg("onlyMonitor");
+  onlyMonitor = argContainer.toFloat();
+  argContainer = server.arg("pumptime");
+  pumptime = argContainer.toFloat();
+  argContainer = server.arg("intervallength");
+  intervallength = argContainer.toFloat();
 
   String message = "Feuchtigkeitsintervall erfolgreich gesetzt!";
   server.send(200, "text/plain", message);
@@ -135,6 +164,18 @@ int getMoisture(){
   return analogRead(MOISTURE_SENSOR_A);
 }
 
+int getReservoir(){
+   int currentRead = digitalRead(MOISTURE_SENSOR_D);
+   int currentResLev = 0;
+//   if (currentRead == 1){
+//     currentResLev = 0;
+//     }
+   if (currentRead == 0){
+    currentResLev = 1;
+     }
+  return currentResLev;
+}
+
 void loop() {
  delay(500);
  timeChunkCounter++;
@@ -147,15 +188,21 @@ void loop() {
 
 // 2 seconds
 
- if ( (timeChunkCounter == 3) | (timeChunkCounter == 10) ) {
+delay(1000);
+
+// if ( (timeChunkCounter == 3) | (timeChunkCounter == 10) ) {
+ if (timeChunkCounter >= intervallength) {
    float currentMoisture = getMoisture();
-   if ( currentMoisture >= moisturMinVal ) {
+   float currentResLev = getReservoir();
+   timeChunkCounter = 0;
+   if ( (currentMoisture >= moisturMinVal ) & (currentResLev == 1) & (onlyMonitor == 0)){
      digitalWrite(WATERPUMPVOLTAGE, HIGH);
-     delay(5000);
+     delay(pumptime);
      digitalWrite(WATERPUMPVOLTAGE, LOW);
-     if (timeChunkCounter == 3){
-       timeChunkCounter = 0;
-     }
+     pumpcycle++;
+//     if (timeChunkCounter == 3){
+//
+//     }
    }    
  }
  Serial.println(String(getMoisture()));
