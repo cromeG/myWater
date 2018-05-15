@@ -27,6 +27,7 @@
 
 #define MOISTURE_SENSOR_A A0 // Analog moisture
 #define MOISTURE_SENSOR_D D5 // D3 and D4 is already occupied water level
+#define MOISTURE_SENSOR_SWITCH D6 // to switch on the moisture sensors
 #define ONE_WIRE_BUS D1  //Bestimmt Port an dem der Sensor angeschlossen ist
 #define WATERPUMPVOLTAGE D2
 
@@ -64,6 +65,7 @@ void setup() {
  Serial.begin(115200);
  DS18B20.begin();
  pinMode(WATERPUMPVOLTAGE, OUTPUT);
+ pinMode(MOISTURE_SENSOR_SWITCH, OUTPUT);
  pinMode(MOISTURE_SENSOR_D, INPUT);
 
   //  Force the ESP into client-only mode
@@ -96,8 +98,8 @@ void setup() {
 void handleRoot() {
   // initialize variable containing the text written on the webpage
   float tempSensorVal = getTemperatur();
-  watLevReSeVal = getReservoir();
-  moistureSeVal = getMoisture();
+  //watLevReSeVal = getReservoir();
+  //moistureSeVal = getMoisture();
   String webpageContent = " ";
   String tempSensorCStr = String(tempSensorVal, 2);
   String WatLevReserStr = String(watLevReSeVal);
@@ -171,11 +173,20 @@ float getTemperatur() {
 }
 
 int getMoisture(){
-  return analogRead(MOISTURE_SENSOR_A);
+  int moisture = 0;
+  digitalWrite(MOISTURE_SENSOR_SWITCH, LOW);
+  delay(50); //0,1 Sek Warten
+  moisture=analogRead(MOISTURE_SENSOR_A);
+  digitalWrite(MOISTURE_SENSOR_SWITCH, HIGH);
+  return moisture;
 }
 
 int getReservoir(){
-   int currentRead = digitalRead(MOISTURE_SENSOR_D);
+  int currentRead =1;
+  digitalWrite(MOISTURE_SENSOR_SWITCH, LOW);
+  delay(50); //0,1 Sek Warten
+  currentRead=digitalRead(MOISTURE_SENSOR_D);
+  digitalWrite(MOISTURE_SENSOR_SWITCH, HIGH);
    int currentResLev = 0;
 //   if (currentRead == 1){
 //     currentResLev = 0;
@@ -191,22 +202,24 @@ void loop() {
  timeChunkCounter++;
  // Flash up notification LED when server is ready to answer (main webpage is reloaded given a request)
  digitalWrite(LED, HIGH); //Led port ausschalten
- delay(1000); //4 Sek Pause
+ delay(1000); //1 Sek Pause
  digitalWrite(LED, LOW); //Led port einschlaten
  delay(1000); 
  server.handleClient();
  delay(1000);
 
  if (timeChunkCounter >= intervallength) {
-   float currentMoisture = getMoisture();
-   float currentResLev = getReservoir();
+   watLevReSeVal = getReservoir();
+   moistureSeVal = getMoisture();
+   //float currentMoisture = getMoisture();
+   //float currentResLev = getReservoir();
    timeChunkCounter = 0;
-   if ( (currentMoisture >= moisturMinVal ) & (currentResLev == 1) & (onlyMonitor == 0)){
+   if ( (moistureSeVal >= moisturMinVal ) & (watLevReSeVal == 1) & (onlyMonitor == 0)){
      digitalWrite(WATERPUMPVOLTAGE, HIGH);
      delay(pumptime);
      digitalWrite(WATERPUMPVOLTAGE, LOW);
      pumpcycle++;
    }    
  }
- Serial.println(String(getMoisture()));
+ //Serial.println(String(getMoisture()));
 }

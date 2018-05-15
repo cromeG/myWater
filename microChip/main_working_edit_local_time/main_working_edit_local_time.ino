@@ -25,8 +25,10 @@
 #include <ESP8266WiFi.h>  // WLAN
 #include <ESP8266WebServer.h> // WLAN
 
+#include "Gsender.h"
 #define MOISTURE_SENSOR_A A0 // Analog moisture
 #define MOISTURE_SENSOR_D D5 // D3 and D4 is already occupied water level
+#define MOISTURE_SENSOR_SWITCH D6 // to switch on the moisture sensors
 #define ONE_WIRE_BUS D1  //Bestimmt Port an dem der Sensor angeschlossen ist
 #define WATERPUMPVOLTAGE D2
 
@@ -47,23 +49,22 @@ int pumptime = 2700;
 int intervallength = 30;
 int  watLevReSeVal = 0;
 int moistureSeVal = 0;
-const char* ssid = "StefanWLAN"; //Ihr Wlan,Netz SSID eintragen
-const char* pass = "Senfeule1992"; //Ihr Wlan,Netz Passwort eintragen
-IPAddress ip(192,168,0,75); //Feste IP des neuen Servers, frei wählbar
+int old_watLevReSeVal = 0;
+int notification_value = 0;
+const char* ssid = "StefanWLAN"; //Ihr Wlan,Netz SSID eintragen "StefanWLAN"
+const char* pass = "Senfeule1992"; //Ihr Wlan,Netz Passwort eintragen "Senfeule1992"
+IPAddress ip(192,168,0,75); //Feste IP des neuen Servers, frei wählbar 192,168,0,75
 IPAddress gateway(192,168,0,1); //Gatway (IP Router eintragen)
 IPAddress subnet(255,255,255,0); //Subnet Maske eintragen
 
 ESP8266WebServer server(80);
-
-//---------- Email Setup -------------
-
-//--------- End Email Setup -------------------
 
 void setup() {
  pinMode(LED, OUTPUT); // Port aus Ausgang schalten
  Serial.begin(115200);
  DS18B20.begin();
  pinMode(WATERPUMPVOLTAGE, OUTPUT);
+ pinMode(MOISTURE_SENSOR_SWITCH, OUTPUT);
  pinMode(MOISTURE_SENSOR_D, INPUT);
 
   //  Force the ESP into client-only mode
@@ -90,14 +91,60 @@ void setup() {
  server.begin();
  
  Serial.println("HTTP Server wurde gestartet!");
+
+//   delay(2000);
+
+//---------- Email Setup -------------
+ Gsender *gsender = Gsender::Instance();    // Getting pointer to class instance
+ Serial.println("instance created");
+ String subject = "MyWater System Active";
+ if(gsender->Subject(subject)->Send("stefanh.rost@gmail.com", "Setup test")) {
+        Serial.println("Message send.");
+    } else {
+        Serial.print("Error sending message: ");
+        Serial.println(gsender->getError());
+    }
+//--------- End Email Setup -------------------
 }
+
+//-------------Local Time----------------
+#include <TimeLib.h>
+#include <Timezone.h>
+#include "time_ntp.h"
+
+// counters
+unsigned long ulReqcount=0;
+unsigned long ulReconncount=0;
+
+// ntp flag
+bool bNTPStarted=false;
+
+// for time conversion
+//Central European Time (Frankfurt, Paris)
+TimeChangeRule CEST = {"CEST", Last, Sun, Mar, 2, 120};     //Central European Summer Time
+TimeChangeRule CET = {"CET ", Last, Sun, Oct, 3, 60};       //Central European Standard Time
+Timezone CE(CEST, CET);
+
+// get UTC time referenced to 1970 by NTP
+time_t getNTP_UTCTime1970() 
+{ 
+  bNTPStarted=false;  // invalidate; time-lib functions crash, if not initalized poperly
+  unsigned long t = getNTPTimestamp();
+  if (t==0) return(0);
+
+  // scale to 1970 
+  // may look like back & forth with ntp code; wrote it to make needed conversions more clear
+  return(t+946684800UL);
+}
+
+//-------------Local Time End----------------
 
 // What is done when the root website, i.e. the IP is called
 void handleRoot() {
   // initialize variable containing the text written on the webpage
   float tempSensorVal = getTemperatur();
-  watLevReSeVal = getReservoir();
-  moistureSeVal = getMoisture();
+  //watLevReSeVal = getReservoir();
+  //moistureSeVal = getMoisture();
   String webpageContent = " ";
   String tempSensorCStr = String(tempSensorVal, 2);
   String WatLevReserStr = String(watLevReSeVal);
@@ -171,11 +218,20 @@ float getTemperatur() {
 }
 
 int getMoisture(){
-  return analogRead(MOISTURE_SENSOR_A);
+  int moisture = 0;
+  digitalWrite(MOISTURE_SENSOR_SWITCH, LOW);
+  delay(50); //0,1 Sek Warten
+  moisture=analogRead(MOISTURE_SENSOR_A);
+  digitalWrite(MOISTURE_SENSOR_SWITCH, HIGH);
+  return moisture;
 }
 
 int getReservoir(){
-   int currentRead = digitalRead(MOISTURE_SENSOR_D);
+  int currentRead =1;
+  digitalWrite(MOISTURE_SENSOR_SWITCH, LOW);
+  delay(50); //0,1 Sek Warten
+  currentRead=digitalRead(MOISTURE_SENSOR_D);
+  digitalWrite(MOISTURE_SENSOR_SWITCH, HIGH);
    int currentResLev = 0;
 //   if (currentRead == 1){
 //     currentResLev = 0;
@@ -191,22 +247,52 @@ void loop() {
  timeChunkCounter++;
  // Flash up notification LED when server is ready to answer (main webpage is reloaded given a request)
  digitalWrite(LED, HIGH); //Led port ausschalten
- delay(1000); //4 Sek Pause
+ delay(1000); //1 Sek Pause
  digitalWrite(LED, LOW); //Led port einschlaten
  delay(1000); 
  server.handleClient();
  delay(1000);
 
  if (timeChunkCounter >= intervallength) {
-   float currentMoisture = getMoisture();
-   float currentResLev = getReservoir();
+   old_watLevReSeVal = watLevReSeVal ;
+   watLevReSeVal = getReservoir();
+   moistureSeVal = getMoisture();
+   notification_value = old_watLevReSeVal-watLevReSeVal ;
+//  notification_value = 1;
+   if (notification_value == 1) {
+     String subject = "Der Wassertank ist leer!";
+     String messageContent = "MYWATER Artificial Watering Machine Status Report \n\n" ;
+      float tempSensorVal = getTemperatur();
+      String tempSensorCStr = String(tempSensorVal, 2);
+      String WatLevReserStr = String(watLevReSeVal);
+      String moistureSenStr = String(moistureSeVal);
+      String PumpCounterStr = String(pumpcycle);
+      String PumpTimeStr = String(pumptime);
+     messageContent += "Temperatur       : " + tempSensorCStr + "°C \n";
+     messageContent += "Wasserstand      : " + WatLevReserStr + "?? \n";
+     messageContent += "Feuchtigkeit     : " + moistureSenStr + "?? \n\n"; 
+     messageContent += "Anzahl Pumpzyklen : " + PumpCounterStr + " \n";
+     if (onlyMonitor == 1)
+      {
+        messageContent += "NUR MONITORING. ES WIRD NICHT GEGOSSEN ! \n \n";
+      }
+     if (onlyMonitor == 0)
+      {
+        messageContent += "ES WIRD GEGOSSEN BEI BEDARF \n \n";
+      }
+     messageContent += "Bitte etwa 2,5 Liter Wasser Nachfüllen \n";
+     Gsender *gsender = Gsender::Instance(); 
+     gsender->Subject(subject)->Send("stefanh.rost@gmail.com", messageContent) ;
+   }
+   //float currentMoisture = getMoisture();
+   //float currentResLev = getReservoir();
    timeChunkCounter = 0;
-   if ( (currentMoisture >= moisturMinVal ) & (currentResLev == 1) & (onlyMonitor == 0)){
+   if ( (moistureSeVal >= moisturMinVal ) & (moistureSeVal != 1024) & (watLevReSeVal == 1) & (onlyMonitor == 0)){
      digitalWrite(WATERPUMPVOLTAGE, HIGH);
      delay(pumptime);
      digitalWrite(WATERPUMPVOLTAGE, LOW);
      pumpcycle++;
    }    
  }
- Serial.println(String(getMoisture()));
+ //Serial.println(String(getMoisture()));
 }
